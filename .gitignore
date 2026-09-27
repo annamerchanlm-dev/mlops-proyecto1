@@ -1,0 +1,18 @@
+# Datos derivados: se regeneran con scripts/prepare_covertype.py
+data-api/data/
+scripts/covertype_uci.zip
+
+# Airflow
+airflow/logs/
+
+# Secretos
+.env
+
+# Python / Jupyter
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+
+# Editor
+.vscode/
