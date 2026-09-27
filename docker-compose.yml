@@ -18,6 +18,7 @@ x-airflow-env: &airflow-env
   AIRFLOW__WEBSERVER__WORKERS: '2'
   AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
   AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: '30'
+  AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL: '30'
   TZ: America/Bogota
   # --- Configuración del proyecto (la lee el DAG) ---
   DATA_API_URL: ${DATA_API_URL}
