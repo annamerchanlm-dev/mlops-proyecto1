@@ -7,6 +7,7 @@ Cada ejecución hace UNA sola petición a la Data API y el proceso completo:
 
   fetch_and_store_raw  GET /data?group_number=N (una vez)  -> raw.fetch_log + raw.covertype
   preprocess           castear, validar, deduplicar          -> processed.covertype + processed.run_stats
+                       (las filas inválidas van a cuarentena  -> processed.rejected, con su motivo)
   build_train_table    reconstruir la tabla de entrenamiento -> train.covertype
   report               resumen del estado acumulado en el log
 
@@ -27,7 +28,7 @@ from datetime import datetime, timedelta
 
 import psycopg2
 import requests
-from psycopg2.extras import execute_values
+from psycopg2.extras import Json, execute_values
 
 from airflow import DAG
 from airflow.exceptions import AirflowSkipException
@@ -130,25 +131,34 @@ def _to_int(valor):
 
 
 def _limpiar(valores):
-    """Devuelve la fila tipada y validada, o None si es inválida."""
+    """Valida y tipa una fila cruda.
+
+    Devuelve (fila_tipada, None) si es válida, o (None, motivo) si va a cuarentena.
+    El motivo no incluye el valor (ese queda en raw_row) para poder agrupar por motivo.
+    """
     if len(valores) != N_COLUMNS:
-        return None
-    try:
-        numericas = [_to_int(v) for v in valores[:10]]
-        cover_type = _to_int(valores[12])
-    except (TypeError, ValueError, OverflowError):
-        return None
+        return None, f"cantidad de columnas distinta de {N_COLUMNS}"
+
+    enteros = []
+    for idx in list(range(10)) + [12]:
+        try:
+            enteros.append(_to_int(valores[idx]))
+        except (TypeError, ValueError, OverflowError):
+            return None, f"{COLUMNS[idx]} no es un entero válido"
+    numericas, cover_type = enteros[:10], enteros[10]
 
     for idx, (minimo, maximo) in RANGES.items():
         if numericas[idx] < minimo or (maximo is not None and numericas[idx] > maximo):
-            return None
+            return None, f"{COLUMNS[idx]} fuera de rango"
 
     wilderness = str(valores[10]).strip()
+    if wilderness not in WILDERNESS:
+        return None, "wilderness_area desconocido"
     soil = str(valores[11]).strip()
-    if wilderness not in WILDERNESS or soil not in SOIL_CODES:
-        return None
+    if soil not in SOIL_CODES:
+        return None, "soil_type desconocido"
 
-    return (*numericas, wilderness, soil, cover_type)
+    return (*numericas, wilderness, soil, cover_type), None
 
 
 def _row_hash(fila):
@@ -237,12 +247,28 @@ def preprocess(**context):
         # Idempotencia: quita lo que este run haya insertado antes
         cur.execute("DELETE FROM processed.covertype WHERE first_dag_run_id = %s", (run_id,))
         cur.execute("DELETE FROM processed.run_stats WHERE dag_run_id = %s", (run_id,))
+        cur.execute("DELETE FROM processed.rejected WHERE dag_run_id = %s", (run_id,))
 
         cur.execute(f"SELECT {columnas_sql} FROM raw.covertype WHERE dag_run_id = %s", (run_id,))
         crudas = cur.fetchall()
 
-        validas = [f for f in (_limpiar(c) for c in crudas) if f is not None]
-        invalidas = len(crudas) - len(validas)
+        resultados = [_limpiar(c) for c in crudas]
+        validas = [fila for fila, _ in resultados if fila is not None]
+        rechazadas = [
+            (run_id, batch, motivo, Json(dict(zip(COLUMNS, cruda))))
+            for cruda, (fila, motivo) in zip(crudas, resultados)
+            if fila is None
+        ]
+        invalidas = len(rechazadas)
+
+        # Cuarentena: ninguna fila se descarta sin dejar rastro
+        if rechazadas:
+            execute_values(
+                cur,
+                "INSERT INTO processed.rejected (dag_run_id, batch_number, reason, raw_row) VALUES %s",
+                rechazadas,
+                page_size=1000,
+            )
 
         # Hash por fila; dentro del mismo batch también puede haber repetidas
         unicas = {}
@@ -333,6 +359,9 @@ def report(**context):
         cur.execute("SELECT cover_type, count(*) FROM train.covertype GROUP BY 1 ORDER BY 1")
         clases = dict(cur.fetchall())
 
+        cur.execute("SELECT reason, count(*) FROM processed.rejected GROUP BY 1 ORDER BY 2 DESC")
+        motivos = dict(cur.fetchall())
+
     print("=" * 72)
     print(f"Run: {run_id}   grupo {group} · batch {batch}")
     print(f"Batches distintos recolectados: {batches} | runs ok: {runs_ok} | "
@@ -341,6 +370,7 @@ def report(**context):
     print(f"Este run: {recibidas} recibidas · {nuevas} nuevas · "
           f"{duplicadas} duplicadas · {invalidas} inválidas")
     print(f"Clases en train: {clases}")
+    print(f"Cuarentena acumulada por motivo: {motivos or 'sin rechazos'}")
     print("=" * 72)
 
 
