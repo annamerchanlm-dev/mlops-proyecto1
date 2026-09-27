@@ -1,5 +1,11 @@
 name: mlops-proyecto1
 
+x-postgres-healthcheck: &pg-healthcheck
+  interval: 10s
+  timeout: 5s
+  retries: 10
+  start_period: 20s
+
 services:
 
   # ---------- API DE DATOS LOCAL (solo desarrollo: --profile dev) ----------
@@ -22,3 +28,55 @@ services:
       retries: 5
       start_period: 30s
     restart: unless-stopped
+
+  # ---------- POSTGRES 1: METADATOS DE AIRFLOW ----------
+  postgres-airflow:
+    image: postgres:16-alpine
+    container_name: p1_postgres_airflow
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: ${POSTGRES_AIRFLOW_PASSWORD}
+      POSTGRES_DB: airflow
+      TZ: America/Bogota
+    volumes:
+      - pg_airflow:/var/lib/postgresql/data
+    healthcheck:
+      <<: *pg-healthcheck
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+    restart: unless-stopped
+
+  # ---------- POSTGRES 2: DATOS (raw / processed / train) ----------
+  postgres-data:
+    image: postgres:16-alpine
+    container_name: p1_postgres_data
+    environment:
+      POSTGRES_USER: ${POSTGRES_DATA_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_DATA_PASSWORD}
+      POSTGRES_DB: covertype
+      POSTGRES_READER_PASSWORD: ${POSTGRES_READER_PASSWORD}
+      TZ: America/Bogota
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro,Z
+    healthcheck:
+      <<: *pg-healthcheck
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_DATA_USER} -d covertype"]
+    restart: unless-stopped
+
+  # ---------- ADMINER: interfaz web para Postgres ----------
+  adminer:
+    image: adminer:latest
+    container_name: p1_adminer
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres-data
+      ADMINER_DESIGN: pepa-linha
+    ports:
+      - "8082:8080"
+    depends_on:
+      postgres-data:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pg_airflow:
+  pg_data:
