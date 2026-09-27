@@ -200,6 +200,38 @@ services:
       start_period: 60s
     restart: unless-stopped
 
+  # ---------- JUPYTER: EDA y entrenamiento -> MinIO ----------
+  jupyter:
+    build: ./jupyter
+    image: mlops-proyecto1/jupyter:latest
+    container_name: p1_jupyter
+    user: "${AIRFLOW_UID:-1000}:0"
+    command: >
+      jupyter lab --ip=0.0.0.0 --port=8888 --no-browser
+      --ServerApp.root_dir=/home/work/notebooks
+      --IdentityProvider.token=${JUPYTER_TOKEN}
+    environment:
+      TZ: America/Bogota
+      # Postgres con el usuario de SOLO LECTURA
+      DATA_DB_URL: postgresql+psycopg2://covertype_reader:${POSTGRES_READER_PASSWORD}@postgres-data:5432/covertype
+      # MinIO con el usuario trainer (escribe en models y datasets)
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_TRAINER_USER}
+      MINIO_SECRET_KEY: ${MINIO_TRAINER_PASSWORD}
+      MODELS_BUCKET: models
+      DATASETS_BUCKET: datasets
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/home/work/notebooks:Z
+    depends_on:
+      postgres-data:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    mem_limit: 3g
+    restart: unless-stopped
+
 volumes:
   pg_airflow:
   pg_data:

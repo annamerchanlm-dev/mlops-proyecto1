@@ -1,0 +1,19 @@
+[project]
+name = "p1-jupyter"
+version = "0.1.0"
+description = "Entorno de EDA y entrenamiento del Proyecto 1 (Covertype)"
+requires-python = "==3.12.*"
+dependencies = [
+    # --- Contrato de versiones: IDENTICAS en inference-api (el .joblib cruza entre contenedores) ---
+    "scikit-learn==1.9.1",
+    "numpy==2.4.6",
+    "pandas==3.0.6",
+    "joblib==1.6.0",
+    # --- Solo viven en Jupyter ---
+    "jupyterlab>=4.6",
+    "matplotlib>=3.11",
+    "sqlalchemy>=2.1",
+    "psycopg2-binary>=2.9",
+    "boto3>=1.43",
+    "pyarrow>=25",
+]
