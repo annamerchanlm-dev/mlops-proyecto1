@@ -79,7 +79,7 @@ services:
 
   # ---------- MINIO: almacenamiento de modelos ----------
   minio:
-    image: minio/minio:latest
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     container_name: p1_minio
     command: server /data --console-address ":9001"
     environment:
@@ -101,7 +101,7 @@ services:
 
   # ---------- MINIO-INIT: bucket, políticas y usuarios (corre una vez) ----------
   minio-init:
-    image: minio/mc:latest
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     container_name: p1_minio_init
     entrypoint: ["/bin/sh", "/init.sh"]
     environment:
