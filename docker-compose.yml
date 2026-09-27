@@ -232,6 +232,34 @@ services:
     mem_limit: 3g
     restart: unless-stopped
 
+  # ---------- INFERENCE API: sirve el modelo de producción desde MinIO ----------
+  inference-api:
+    build: ./inference-api
+    image: mlops-proyecto1/inference-api:latest
+    container_name: p1_inference_api
+    environment:
+      TZ: America/Bogota
+      MINIO_ENDPOINT: http://minio:9000
+      # Usuario de SOLO LECTURA: la API consume modelos, no los modifica
+      MINIO_ACCESS_KEY: ${MINIO_INFERENCE_USER}
+      MINIO_SECRET_KEY: ${MINIO_INFERENCE_PASSWORD}
+      MODELS_BUCKET: models
+      MODEL_PREFIX: covertype
+      REGISTRY_TTL_SECONDS: "5"
+    ports:
+      - "8000:8000"
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 1g
+    restart: unless-stopped
+
 volumes:
   pg_airflow:
   pg_data:

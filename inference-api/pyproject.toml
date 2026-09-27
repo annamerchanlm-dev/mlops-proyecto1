@@ -1,0 +1,17 @@
+[project]
+name = "p1-inference-api"
+version = "0.1.0"
+description = "API de inferencia del Proyecto 1: sirve los modelos Covertype publicados en MinIO"
+requires-python = "==3.12.*"
+dependencies = [
+    # --- Contrato de versiones: IDENTICAS a jupyter/pyproject.toml (el .joblib cruza entre contenedores) ---
+    "scikit-learn==1.9.1",
+    "numpy==2.4.6",
+    "pandas==3.0.6",
+    "joblib==1.6.0",
+    # --- Solo viven en la API ---
+    "fastapi>=0.141",
+    "uvicorn[standard]>=0.54",
+    "pydantic>=2.13",
+    "boto3>=1.43",
+]
