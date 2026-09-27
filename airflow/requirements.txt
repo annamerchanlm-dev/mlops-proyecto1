@@ -1,0 +1,5 @@
+# Dependencias del DAG. Se instalan respetando las constraints oficiales de Airflow 2.10.5,
+# así pip no puede cambiar versiones de las que depende Airflow.
+requests
+pandas
+psycopg2-binary
