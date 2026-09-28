@@ -337,7 +337,7 @@ Comparado con la prueba de desarrollo (41 724 filas), el ranking de F1 es el mis
 | Modelos en MinIO | `docs/img/minio_models.png` |
 | Snapshot del dataset en MinIO | `docs/img/minio_datasets.png` |
 | Predicción desde Swagger | `docs/img/swagger_predict.png` |
-| Verificación del despliegue | `docs/img/verificacion.png` |
+| Verificación del despliegue | `docs/evidencia/verificacion.txt` |
 
 ## Estructura del repositorio
 
