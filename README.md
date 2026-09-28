@@ -2,7 +2,7 @@
 
 Operaciones de Machine Learning, Pontificia Universidad Javeriana (2026-2)
 Profesor: Cristian Javier Díaz Álvarez
-Grupo 2: Ana María Merchán León
+Grupo 2: Ana María Merchán León Y Daniel Niño
 
 Pipeline de MLOps desplegado con Docker Compose en la VM del curso. Airflow consume la API de datos del profesor una vez por ejecución, guarda la información en PostgreSQL en tres etapas (crudo, procesado y listo para entrenar), un notebook de JupyterLab entrena y publica los modelos en MinIO, y una API en FastAPI sirve el modelo que esté marcado como producción.
 
