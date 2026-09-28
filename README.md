@@ -116,20 +116,22 @@ docker compose --profile dev up -d --build
 
 ## Acceso a las interfaces
 
-La red del laboratorio solo deja pasar SSH hacia las VMs, así que las interfaces se abren con un túnel. Desde el equipo local:
+Los puertos se publican en todas las interfaces de la VM, así que desde la red de la universidad se abren directamente:
+
+| Interfaz | URL | Credenciales |
+|---|---|---|
+| Airflow | http://10.43.97.102:8080 | `admin` / `AIRFLOW_ADMIN_PASSWORD` |
+| JupyterLab | http://10.43.97.102:8888 | `JUPYTER_TOKEN` |
+| Consola MinIO | http://10.43.97.102:9001 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` |
+| API de inferencia (Swagger) | http://10.43.97.102:8000/docs | — |
+| Adminer | http://10.43.97.102:8082 | servidor `postgres-data`, usuario `covertype` |
+
+Si la red desde la que se accede solo deja pasar SSH, las mismas interfaces quedan en `http://localhost:<puerto>` con un túnel:
 
 ```bash
 ssh -L 8080:localhost:8080 -L 8888:localhost:8888 -L 9001:localhost:9001 \
     -L 8000:localhost:8000 -L 8082:localhost:8082 estudiante@10.43.97.102
 ```
-
-| Interfaz | URL | Credenciales |
-|---|---|---|
-| Airflow | http://localhost:8080 | `admin` / `AIRFLOW_ADMIN_PASSWORD` |
-| JupyterLab | http://localhost:8888 | `JUPYTER_TOKEN` |
-| Consola MinIO | http://localhost:9001 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` |
-| API de inferencia | http://localhost:8000/docs | — |
-| Adminer | http://localhost:8082 | servidor `postgres-data`, usuario `covertype` |
 
 La imagen de MinIO que se usa es un fork comunitario; su consola se presenta con el nombre "SILO", pero es el mismo servidor y la misma API S3.
 
@@ -345,7 +347,7 @@ La proporción de duplicados por ejecución también sigue la predicción (10 % 
 | Las imágenes oficiales `minio/minio` y `minio/mc` ya no están disponibles en Docker Hub | Se usa `pgsty/minio`, fork mantenido, con versión fija. La misma imagen trae `mc`, así que `minio-init` no necesita otra |
 | `raw.githubusercontent.com` está bloqueado desde la VM | El archivo de constraints de Airflow se descargó por jsDelivr y se versiona en `airflow/`; `uv` se instala desde PyPI |
 | La partición `/var` (15 GB), donde Docker guarda imágenes y volúmenes, se llenó | El disco virtual tenía unos 90 GB sin asignar. Se creó una partición, se agregó al grupo LVM y se amplió `/var` a 45 GB en caliente (`lvextend -r`) |
-| La red solo permite SSH hacia la VM | Acceso a las interfaces por túnel SSH o reenvío de puertos de VS Code |
+| Desde algunas redes externas solo pasa SSH hacia la VM | Túnel SSH o reenvío de puertos de VS Code; desde la red de la universidad los puertos se abren directamente |
 | Airflow tardaba hasta 5 minutos en ver un DAG nuevo | `AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL=30` |
 
 ## Resultados de la corrida oficial
