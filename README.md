@@ -19,11 +19,12 @@ El problema de fondo es el dataset Covertype (UCI): predecir el tipo de cobertur
 5. [Flujo de datos](#flujo-de-datos)
 6. [Entrenamiento y registro de modelos](#entrenamiento-y-registro-de-modelos)
 7. [API de inferencia](#api-de-inferencia)
-8. [Decisiones de diseño](#decisiones-de-diseño)
-9. [Hallazgos sobre la API de datos](#hallazgos-sobre-la-api-de-datos)
-10. [Problemas encontrados en la VM](#problemas-encontrados-en-la-vm)
-11. [Resultados de la corrida oficial](#resultados-de-la-corrida-oficial)
-12. [Estructura del repositorio](#estructura-del-repositorio)
+8. [Volúmenes y persistencia](#volúmenes-y-persistencia)
+9. [Decisiones de diseño](#decisiones-de-diseño)
+10. [Hallazgos sobre la API de datos](#hallazgos-sobre-la-api-de-datos)
+11. [Problemas encontrados en la VM](#problemas-encontrados-en-la-vm)
+12. [Resultados de la corrida oficial](#resultados-de-la-corrida-oficial)
+13. [Estructura del repositorio](#estructura-del-repositorio)
 
 ---
 
@@ -244,6 +245,63 @@ Comportamiento:
 - `registry.json` se relee cada 5 segundos: si se promueve otro modelo, la API lo usa sin reiniciarse. Cada versión se descarga una vez y queda en memoria.
 - Si no hay modelo en producción responde 503; la API no se cae.
 
+## Volúmenes y persistencia
+
+La regla es simple: el estado vive en volúmenes con nombre y el código en el repositorio. Ningún contenedor guarda nada importante en su propia capa, así que cualquiera se puede borrar y recrear sin perder datos.
+
+### Volúmenes con nombre (estado)
+
+| Volumen | Servicio | Ruta en el contenedor | Qué guarda |
+|---|---|---|---|
+| `pg_airflow` | postgres-airflow | `/var/lib/postgresql/data` | Metadatos de Airflow: DAG runs, estados de tareas, usuarios, conexiones |
+| `pg_data` | postgres-data | `/var/lib/postgresql/data` | Base `covertype`: esquemas `raw`, `processed`, `train` |
+| `minio_data` | minio | `/data` | Buckets `models` y `datasets`: artefactos, metadata, registro y snapshots |
+
+Docker les antepone el nombre del proyecto (`mlops-proyecto1_pg_data`, etc.). Se usan volúmenes con nombre y no carpetas del host porque los administra Docker (permisos, SELinux, ubicación en `/var/lib/docker`) y porque así los datos no terminan por error dentro del repositorio.
+
+### Montajes del host (código y configuración)
+
+| Origen | Destino | Modo | Motivo |
+|---|---|---|---|
+| `./db/init` | postgres-data `/docker-entrypoint-initdb.d` | `ro,Z` | Migraciones; solo se ejecutan cuando el volumen está vacío |
+| `./minio/init.sh`, `./minio/policies` | minio-init | `ro,Z` | Buckets, políticas y usuarios |
+| `./airflow/dags` | webserver y scheduler | `Z` | Editar un DAG no requiere reconstruir la imagen |
+| `./airflow/logs` | webserver y scheduler | `Z` | Logs de las tareas visibles desde el host (ignorados por Git) |
+| `./notebooks` | jupyter | `Z` | Los notebooks editados en JupyterLab quedan en el repositorio |
+| `./data-api/data` | data-api (solo `dev`) | `Z` | CSV del dataset para la copia local de la API |
+
+- `ro`: el contenedor no puede modificar lo que solo necesita leer.
+- `Z`: la VM usa Rocky Linux con SELinux en modo *enforcing*. Sin esta opción el contenedor recibe *permission denied* al leer la carpeta montada; `Z` le asigna la etiqueta SELinux correcta.
+- `inference-api` y `airflow-init` no montan nada: la API es *stateless* (lee el modelo de MinIO y lo guarda en memoria) y `airflow-init` solo escribe en la base de metadatos.
+
+### Qué sobrevive a cada operación
+
+| Operación | Contenedores | Volúmenes (datos y modelos) |
+|---|---|---|
+| `docker compose restart` / reinicio de la VM | se reinician | se conservan |
+| `docker compose up -d --build` | se recrean los que cambiaron | se conservan |
+| `docker compose down` | se eliminan | se conservan |
+| `docker compose down -v` | se eliminan | **se borran** |
+
+`down -v` se usó una sola vez y a propósito: para pasar del modo desarrollo al de entrega con la base y MinIO vacíos, de modo que los resultados oficiales no se mezclen con los de prueba. Como las migraciones de `db/init/` y `minio-init` recrean todo al arrancar, el sistema se reconstruye solo sobre volúmenes nuevos.
+
+### Inspección y respaldo
+
+```bash
+docker volume ls --filter name=mlops-proyecto1       # volúmenes del proyecto
+docker system df -v | grep mlops-proyecto1           # tamaño de cada uno
+
+mkdir -p backups                                      # ignorado por Git
+# Base de datos (formato custom, se restaura con pg_restore)
+docker compose exec -T postgres-data pg_dump -U covertype -d covertype -Fc > backups/covertype_$(date +%F).dump
+# Modelos y snapshots
+docker run --rm --network mlops-proyecto1_default --env-file .env -v "$PWD/backups":/backups:Z \
+  --entrypoint sh pgsty/minio:RELEASE.2026-08-04T00-00-00Z -c \
+  'mc alias set l http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" && mc mirror l/models /backups/models && mc mirror l/datasets /backups/datasets'
+```
+
+Los respaldos se hacen con las herramientas de cada servicio (`pg_dump`, `mc mirror`) y no copiando la carpeta interna del volumen, porque una copia en caliente de los archivos de PostgreSQL puede quedar inconsistente.
+
 ## Decisiones de diseño
 
 | Decisión | Motivo |
@@ -260,6 +318,7 @@ Comportamiento:
 | Snapshot del dataset por huella | Cada modelo apunta a los datos exactos con que se entrenó |
 | Split por hash | Métricas comparables entre reentrenamientos |
 | Entrenar y promover por separado | Publicar un modelo no lo pone en producción; la promoción sigue reglas explícitas |
+| Volúmenes con nombre para el estado, montajes del host solo para código | Los contenedores son desechables; los datos no dependen de ellos ni entran al repositorio |
 | Imágenes con versión fija | El despliegue no cambia porque una etiqueta `latest` se actualice o desaparezca |
 
 ## Hallazgos sobre la API de datos
