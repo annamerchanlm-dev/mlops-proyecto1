@@ -1,0 +1,32 @@
+== Contenedores
+  [OK]    postgres-airflow en ejecución
+  [OK]    postgres-data en ejecución
+  [OK]    minio en ejecución
+  [OK]    airflow-webserver en ejecución
+  [OK]    airflow-scheduler en ejecución
+  [OK]    jupyter en ejecución
+  [OK]    inference-api en ejecución
+  [OK]    adminer en ejecución
+  [OK]    minio-init terminó sin errores
+  [OK]    airflow-init terminó sin errores
+== Postgres (datos)
+  [OK]    esquemas raw / processed / train
+  [OK]    6 tablas (incluida la cuarentena processed.rejected)
+  [OK]    diccionario de datos (comentarios en train.covertype)
+  [OK]    covertype_reader NO puede escribir
+== MinIO
+  [OK]    buckets models y datasets
+  [OK]    trainer puede escribir en models
+  [OK]    inference NO puede escribir en models
+== Airflow
+  [OK]    DAG covertype_ingest registrado
+  [OK]    sin errores de importación de DAGs
+  [OK]    UI de Airflow responde (8080)
+== Jupyter e Inference API
+  [OK]    JupyterLab responde (8888)
+  [OK]    Inference API responde (8000)
+  [OK]    Swagger de la API disponible (/docs)
+== Data API configurada: http://10.43.97.110:8080
+  [OK]    Data API alcanzable (solo GET /, no consume batches)
+
+Resultado: 24 OK, 0 con falla
